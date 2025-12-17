@@ -15,6 +15,8 @@ from pupil_labs.dynamic_content_on_rim.video.read import read_video_ts
 
 async def run_modules(
     openai_api_key,
+    gemini_api_key,
+    model_provider,
     worksp_id,
     rec_id,
     cloud_api_key,
@@ -24,6 +26,7 @@ async def run_modules(
     batch_size,
     start_time_seconds,
     end_time_seconds,
+    stop_event=None,
 ):
     #############################################################################
     # 1. Download, read data, and create gaze overlay video to be sent to OpenAI
@@ -103,6 +106,8 @@ async def run_modules(
         base64_frames,
         frame_metadata,
         openai_api_key,
+        gemini_api_key,
+        model_provider,
         cloud_api_key,
         rec_id,
         worksp_id,
@@ -111,6 +116,7 @@ async def run_modules(
         int(batch_size),
         start_time_seconds,
         end_time_seconds,
+        stop_event=stop_event,
     )
 
     async_process_frames_output_events = await frame_processor.prompting(

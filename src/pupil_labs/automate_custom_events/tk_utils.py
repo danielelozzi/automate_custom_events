@@ -64,6 +64,19 @@ class TTKFormLayoutHelper:
 
         return entry
 
+    # Function to create a labeled combobox
+    def create_labeled_combobox(self, parent, label_text, row, values, default_value=None):
+        """Helper function to create a label and combobox widget in a given parent."""
+        label = ttk.Label(parent, text=label_text, style="Heading.TLabel")
+        label.grid(row=row, column=0, sticky='w', padx=5, pady=5)
+
+        combobox = ttk.Combobox(parent, values=values, state="readonly")
+        combobox.grid(row=row, column=1, sticky='ew', padx=5, pady=5)
+
+        if default_value:
+            combobox.set(default_value)
+
+        return combobox
 
     # Function to create a labeled folder selector
     def create_labeled_folder_selector(self,parent, label_text, row, default_path):

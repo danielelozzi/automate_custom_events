@@ -7,6 +7,9 @@ import aiohttp
 from pupil_labs.automate_custom_events.cloud_interaction import send_event_to_cloud
 import asyncio
 import logging
+import base64
+import io
+from PIL import Image
 
 logger = logging.getLogger(__name__)
 
@@ -16,6 +19,8 @@ class FrameProcessor:
         base64_frames,
         vid_df,
         openai_api_key,
+        gemini_api_key,
+        model_provider,
         cloud_token,
         recording_id,
         workspace_id,
@@ -24,19 +29,35 @@ class FrameProcessor:
         batch_size,
         start_time_seconds,
         end_time_seconds,
+        stop_event=None,
     ):
         # General params
         self.base64_frames = base64_frames
         self.frame_metadata = vid_df
         self.openai_api_key = openai_api_key
+        self.gemini_api_key = gemini_api_key
+        self.model_provider = model_provider
         self.cloud_token = cloud_token
         self.recording_id = recording_id
         self.workspace_id = workspace_id
         self.batch_size = batch_size
         self.start_time_seconds = int(start_time_seconds)
         self.end_time_seconds = int(end_time_seconds)
+        self.stop_event = stop_event
 
-        self.client = OpenAI(api_key=openai_api_key)
+        if self.model_provider == "OpenAI":
+            self.client = OpenAI(api_key=openai_api_key)
+        elif self.model_provider == "Local (CLIP)":
+            try:
+                from transformers import CLIPProcessor, CLIPModel
+                import torch
+                self.clip_model = CLIPModel.from_pretrained("openai/clip-vit-base-patch32")
+                self.clip_processor = CLIPProcessor.from_pretrained("openai/clip-vit-base-patch32")
+                self.torch = torch
+            except ImportError:
+                logger.error("Transformers or Torch not installed. Please install them to use CLIP.")
+                raise
+
         self.activities = re.split(r"\s*;\s*", prompt_description)
         self.codes = re.split(r"\s*;\s*", prompt_codes)
 
@@ -105,6 +126,11 @@ class FrameProcessor:
         if not self.is_within_time_range(timestamp):
             # print(f"Timestamp {timestamp} is not within selected timerange")
             return None
+        
+        if self.model_provider == "Gemini":
+            return await self.query_frame_gemini(index, session, timestamp)
+        elif self.model_provider == "Local (CLIP)":
+            return await self.query_frame_clip(index, timestamp)
 
         base64_frames_content = [{"image": self.base64_frames[index], "resize": 768}]
         video_gaze_df_content = [self.frame_metadata.iloc[index].to_dict()]
@@ -201,7 +227,122 @@ class FrameProcessor:
         print("Max retries reached. Exiting.")
         return None
 
+    async def query_frame_gemini(self, index, session, timestamp):
+        base64_image = self.base64_frames[index]
+        video_gaze_df_content = [self.frame_metadata.iloc[index].to_dict()]
+        context_str = f"The frames are extracted from this video and the timestamps and frame numbers are stored in this dataframe: {json.dumps(video_gaze_df_content)}"
+        
+        url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key={self.gemini_api_key}"
+        
+        payload = {
+            "contents": [{
+                "parts": [
+                    {"text": self.base_prompt + "\n\n" + context_str},
+                    {
+                        "inline_data": {
+                            "mime_type": "image/jpeg",
+                            "data": base64_image
+                        }
+                    }
+                ]
+            }],
+            "generationConfig": {
+                "maxOutputTokens": 300
+            }
+        }
+
+        headers = {"Content-Type": "application/json"}
+
+        retry_count = 0
+        max_retries = 6
+
+        while retry_count < max_retries:
+            async with session.post(url, headers=headers, json=payload) as response:
+                if response.status == 200:
+                    result = await response.json()
+                    try:
+                        response_message = result["candidates"][0]["content"]["parts"][0]["text"]
+                        print("Response from Gemini API:", response_message)
+                        
+                        pattern = r"Frame\s(\d+):\sTimestamp\s-\s([\d.]+),\sCode\s-\s(\w+_\w+)"
+                        matches = re.findall(pattern, response_message)
+                        
+                        if matches:
+                            match = matches[0]
+                            # frame_number = int(match[0]) 
+                            timestamp_res = float(match[1])
+                            code = match[2]
+                            return self._register_event(code, timestamp_res, index)
+                        return None
+                    except (KeyError, IndexError) as e:
+                        logger.error(f"Error parsing Gemini response: {e}")
+                        return None
+                elif response.status == 429:
+                    retry_count += 1
+                    # Exponential backoff: 2, 4, 8, 16, 32, 64 seconds
+                    wait_time = 2 ** retry_count
+                    logger.warning(f"Gemini Rate limit hit (429). Retrying in {wait_time} seconds...")
+                    await asyncio.sleep(wait_time)
+                else:
+                    logger.error(f"Gemini API Error: {response.status} - {await response.text()}")
+                    return None
+        
+        logger.error("Max retries reached for Gemini.")
+        return None
+
+    async def query_frame_clip(self, index, timestamp):
+        return await asyncio.to_thread(self._run_clip_inference, index, timestamp)
+
+    def _run_clip_inference(self, index, timestamp):
+        image_data = base64.b64decode(self.base64_frames[index])
+        image = Image.open(io.BytesIO(image_data))
+
+        # Compare image against all activities
+        inputs = self.clip_processor(text=self.activities, images=image, return_tensors="pt", padding=True)
+        
+        with self.torch.no_grad():
+            outputs = self.clip_model(**inputs)
+        
+        logits_per_image = outputs.logits_per_image
+        probs = logits_per_image.softmax(dim=1)
+        
+        # Threshold for detection
+        threshold = 0.3 
+        max_prob, max_idx = probs.max(dim=1)
+        
+        if max_prob.item() > threshold:
+            code = self.codes[max_idx.item()]
+            return self._register_event(code, timestamp, index)
+        return None
+
+    def _register_event(self, code, timestamp, frame_number):
+        if code not in self.codes:
+            return None
+
+        activity_active = self.activity_states[code]
+        if not activity_active:
+            self.activity_states[code] = True
+            send_event_to_cloud(
+                self.workspace_id,
+                self.recording_id,
+                code,
+                timestamp,
+                self.cloud_token,
+            )
+            logger.info(f"Activity detected: {code}")
+        else:
+            logger.debug(f"Event for {code} already sent - ignoring.")
+
+        return {
+            "frame_id": frame_number,
+            "timestamp [s]": timestamp,
+            "code": code,
+        }
+
     async def binary_search(self, session, start, end, identified_activities):
+        if self.stop_event and self.stop_event.is_set():
+            return []
+
         if start >= end:
             return []
 
@@ -230,6 +371,10 @@ class FrameProcessor:
         identified_activities = set()
         all_results = []
         for i in range(0, len(self.base64_frames), batch_size):
+            if self.stop_event and self.stop_event.is_set():
+                logger.info("Processing stopped by user.")
+                break
+
             end = min(i + batch_size, len(self.base64_frames))
             batch_results = await self.binary_search(
                 session, i, end, identified_activities

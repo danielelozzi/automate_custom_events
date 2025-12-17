@@ -228,37 +228,51 @@ class App():
 
         form_layout = TTKFormLayoutHelper(settings_frame)
 
+        self.model_provider_entry = form_layout.create_labeled_combobox(
+            container,
+            "Model Provider",
+            row=0,
+            values=["OpenAI", "Gemini", "Local (CLIP)"],
+            default_value="OpenAI",
+        )
         self.url_entry = form_layout.create_labeled_entry(
             container,
             "Recording Link",
-            row=0,
+            row=1,
             default_value="",
         )
         self.cloud_token_entry = form_layout.create_labeled_entry(
             container,
             "Cloud API Token",
-            row=1,
+            row=2,
             show="*",
             default_value="L",
         )
         self.openai_key_entry = form_layout.create_labeled_entry(
             container,
             "OpenAI API Key",
-            row=2,
+            row=3,
+            show="*",
+            default_value="",
+        )
+        self.gemini_key_entry = form_layout.create_labeled_entry(
+            container,
+            "Gemini API Key",
+            row=4,
             show="*",
             default_value="",
         )
         self.download_path_entry = form_layout.create_labeled_folder_selector(
-            container, "Download Path", row=3, default_path=Path.cwd()
+            container, "Download Path", row=5, default_path=Path.cwd()
         )
         self.batch_entry = form_layout.create_labeled_entry(
-            container, "Frame batch", row=4, default_value=""
+            container, "Frame batch", row=6, default_value=""
         )
         self.start_entry = form_layout.create_labeled_entry(
-            container, "Start (s)", row=5, default_value=""
+            container, "Start (s)", row=7, default_value=""
         )
         self.end_entry = form_layout.create_labeled_entry(
-            container, "End (s)", row=6, default_value=""
+            container, "End (s)", row=8, default_value=""
         )
 
         return container
@@ -269,6 +283,7 @@ class App():
             self.url_entry,
             self.cloud_token_entry,
             self.openai_key_entry,
+            self.gemini_key_entry,
             self.prompt_entry,
             self.prompt_event_entry,
             self.batch_entry,
@@ -308,6 +323,7 @@ class App():
         threading.Thread(target=task).start()
 
     async def run_task(self):
+        model_provider = self.model_provider_entry.get()
         url = self.url_entry.get()
         cloud_token = self.cloud_token_entry.get()
         prompt_description = self.prompt_entry.get("1.0", "end-1c")
@@ -316,10 +332,13 @@ class App():
         start_time_seconds = self.start_entry.get()
         end_time_seconds = self.end_entry.get()
         openai_api_key = self.openai_key_entry.get()
+        gemini_api_key = self.gemini_key_entry.get()
         download_path = Path(self.download_path_entry.get())
         workspace_id, rec_id = extract_ids(url)
         await run_modules(
             openai_api_key,
+            gemini_api_key,
+            model_provider,
             workspace_id,
             rec_id,
             cloud_token,
@@ -340,4 +359,3 @@ def run_main():
     
 if __name__ == "__main__":
     run_main()
-
