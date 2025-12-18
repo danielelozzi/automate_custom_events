@@ -30,6 +30,7 @@ class FrameProcessor:
         start_time_seconds,
         end_time_seconds,
         stop_event=None,
+        save_locally=False,
     ):
         # General params
         self.base64_frames = base64_frames
@@ -44,6 +45,7 @@ class FrameProcessor:
         self.start_time_seconds = int(start_time_seconds)
         self.end_time_seconds = int(end_time_seconds)
         self.stop_event = stop_event
+        self.save_locally = save_locally
 
         if self.model_provider == "OpenAI":
             self.client = OpenAI(api_key=openai_api_key)
@@ -322,14 +324,17 @@ class FrameProcessor:
         activity_active = self.activity_states[code]
         if not activity_active:
             self.activity_states[code] = True
-            send_event_to_cloud(
-                self.workspace_id,
-                self.recording_id,
-                code,
-                timestamp,
-                self.cloud_token,
-            )
-            logger.info(f"Activity detected: {code}")
+            if not self.save_locally:
+                send_event_to_cloud(
+                    self.workspace_id,
+                    self.recording_id,
+                    code,
+                    timestamp,
+                    self.cloud_token,
+                )
+                logger.info(f"Activity detected: {code} (Sent to Cloud)")
+            else:
+                logger.info(f"Activity detected: {code} (Local Only)")
         else:
             logger.debug(f"Event for {code} already sent - ignoring.")
 

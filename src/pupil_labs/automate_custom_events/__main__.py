@@ -228,6 +228,9 @@ class App():
 
         form_layout = TTKFormLayoutHelper(settings_frame)
 
+        self.use_local_data_var = tk.BooleanVar(value=False)
+        self.save_locally_var = tk.BooleanVar(value=False)
+
         self.model_provider_entry = form_layout.create_labeled_combobox(
             container,
             "Model Provider",
@@ -273,6 +276,12 @@ class App():
         )
         self.end_entry = form_layout.create_labeled_entry(
             container, "End (s)", row=8, default_value=""
+        )
+        self.use_local_data_checkbox = form_layout.create_labeled_checkbox(
+            container, "Use Local Data", row=9, variable=self.use_local_data_var
+        )
+        self.save_locally_checkbox = form_layout.create_labeled_checkbox(
+            container, "Save Events Locally Only", row=10, variable=self.save_locally_var
         )
 
         return container
@@ -334,10 +343,12 @@ class App():
         openai_api_key = self.openai_key_entry.get()
         gemini_api_key = self.gemini_key_entry.get()
         download_path = Path(self.download_path_entry.get())
+        use_local_data = self.use_local_data_var.get()
+        save_locally = self.save_locally_var.get()
         workspace_id, rec_id = extract_ids(url)
         await run_modules(
-            openai_api_key,
             gemini_api_key,
+            openai_api_key,
             model_provider,
             workspace_id,
             rec_id,
@@ -348,6 +359,8 @@ class App():
             batch_size,
             start_time_seconds,
             end_time_seconds,
+            use_local_data=use_local_data,
+            save_locally=save_locally,
         )
     def execute(self):
         self.root.mainloop()

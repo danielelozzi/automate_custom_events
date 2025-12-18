@@ -27,16 +27,22 @@ async def run_modules(
     start_time_seconds,
     end_time_seconds,
     stop_event=None,
+    use_local_data=False,
+    save_locally=False,
 ):
     #############################################################################
     # 1. Download, read data, and create gaze overlay video to be sent to OpenAI
     #############################################################################
-    logging.info(
-        "◎ Getting the recording data from Pupil Cloud! ⚡️[/]", extra={"markup": True}
-    )
-
-    download_recording(rec_id, worksp_id, download_path, cloud_api_key)
-    recpath = Path(download_path / rec_id)
+    if not use_local_data:
+        logging.info(
+            "◎ Getting the recording data from Pupil Cloud! ⚡️[/]", extra={"markup": True}
+        )
+        download_recording(rec_id, worksp_id, download_path, cloud_api_key)
+        recpath = Path(download_path / rec_id)
+    else:
+        logging.info("◎ Using local data folder.", extra={"markup": True})
+        recpath = Path(download_path)
+        
     gaze_overlay_path = os.path.join(recpath, "gaze_overlay.mp4")
     if os.path.exists(gaze_overlay_path):
         logging.debug(f"{gaze_overlay_path} exists.")
@@ -117,6 +123,7 @@ async def run_modules(
         start_time_seconds,
         end_time_seconds,
         stop_event=stop_event,
+        save_locally=save_locally,
     )
 
     async_process_frames_output_events = await frame_processor.prompting(

@@ -87,6 +87,16 @@ Avviare con **Compute** e interrompere in qualsiasi momento con
 I risultati vengono salvati come `custom_events.csv` e, se configurato,
 caricati su Pupil Cloud.
 
+## Utilizzo Dati Locali (Offline)
+
+È possibile analizzare registrazioni già scaricate sul computer:
+
+1.  Spuntare la casella **Use Local Data**.
+2.  Nel campo **Download Path**, selezionare la cartella che contiene i file della registrazione (es. `gaze.csv`, video, ecc.).
+3.  Opzionalmente, spuntare **Save Events Locally Only** per evitare di inviare i risultati a Pupil Cloud.
+    *   Se si sceglie di salvare solo localmente, il campo **Recording Link** può essere ignorato.
+    *   Se si vuole caricare i dati sul cloud pur usando file locali, è necessario inserire il **Recording Link** originale per permettere l'identificazione della sessione.
+
 ## Licenza e attribuzione
 
 Questo progetto è un fork del software originale di **Pupil Labs**.\

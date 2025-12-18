@@ -89,6 +89,16 @@ class TTKFormLayoutHelper:
 
         return folder_selector
 
+    # Function to create a labeled checkbox
+    def create_labeled_checkbox(self, parent, label_text, row, variable):
+        """Helper function to create a label and checkbox widget in a given parent."""
+        label = ttk.Label(parent, text=label_text, style="Heading.TLabel")
+        label.grid(row=row, column=0, sticky='w', padx=5, pady=5)
+
+        checkbox = ttk.Checkbutton(parent, variable=variable)
+        checkbox.grid(row=row, column=1, sticky='w', padx=5, pady=5)
+        
+        return checkbox
 
 
 class FolderSelector(ttk.Frame):
